@@ -1,0 +1,48 @@
+{
+    "name": "dakotajune/normalize",
+    "description": "An Eloquent cast that normalizes string attributes through Stringable operations, with a `normalize:` column modifier for Laravel Blueprint drafts.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3",
+        "ext-mbstring": "*",
+        "ext-tokenizer": "*",
+        "illuminate/contracts": "^11.0|^12.0|^13.0",
+        "illuminate/database": "^11.0|^12.0|^13.0",
+        "illuminate/filesystem": "^11.0|^12.0|^13.0",
+        "illuminate/support": "^11.0|^12.0|^13.0"
+    },
+    "require-dev": {
+        "laravel-shift/blueprint": "^2.10",
+        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "pestphp/pest": "^3.0|^4.0"
+    },
+    "suggest": {
+        "laravel-shift/blueprint": "Adds the `normalize:` column modifier to draft.yaml (^2.10)."
+    },
+    "autoload": {
+        "psr-4": {
+            "Dakotajune\\Normalize\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Dakotajune\\Normalize\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Dakotajune\\Normalize\\NormalizeServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
