@@ -22,7 +22,7 @@ it('adds tagged casts for the columns that ask for them, and nothing else', func
 it('lists the models it edited as updated', function () {
     $output = $this->build($this->draft());
 
-    expect($output['updated'])->toContain('app/Models/ContactType.php')
+    expect(array_column($output['updated'], 1))->toContain('app/Models/ContactType.php')
         ->not->toContain('app/Models/Plain.php');
 });
 
@@ -122,7 +122,7 @@ it('does nothing for a draft without the modifier', function () {
     $draft = $this->draft(['Plain' => ['label' => 'string']]);
     $output = $this->build($draft);
 
-    expect($output['updated'] ?? [])->not->toContain('app/Models/Plain.php')
+    expect(array_column($output['updated'] ?? [], 1))->not->toContain('app/Models/Plain.php')
         ->and(file_exists(base_path('.blueprint_normalize')))->toBeFalse();
 });
 
@@ -202,4 +202,16 @@ YAML;
         ->toContain("'bio' => NormalizeOnSet::using('squish', 'limit:500;...'), // @generated normalize")
         ->toContain("'note' => Normalize::using('replace:a b;c'), // @generated normalize")
         ->and(lints($model))->toBeTrue();
+});
+
+it('reports files as [label, path] pairs, the way Blueprint prints and records them', function () {
+    $output = $this->build($this->draft());
+
+    expect($output['updated'])->not->toBeEmpty();
+
+    foreach ($output['updated'] as $entry) {
+        expect($entry)->toBeArray()->toHaveCount(2)
+            ->and($entry[0])->toBeString()
+            ->and($entry[1])->toBeString();
+    }
 });

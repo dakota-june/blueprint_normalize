@@ -25,7 +25,8 @@ use InvalidArgumentException;
  *
  * Blueprint rewrites each model on every build, so the entries are added again after it has run (generators
  * run in registration order, ours last) and written to the same place, which makes a rebuild identical.
- * Models are listed as `updated`; nothing is created, so `blueprint:erase` never deletes anything of ours.
+ * Models are listed as `updated` ([label, path] pairs, as Blueprint prints and records them); nothing is created,
+ * so `blueprint:erase` never deletes anything of ours.
  */
 final class NormalizeGenerator implements Generator
 {
@@ -94,7 +95,7 @@ final class NormalizeGenerator implements Generator
 
             if ($result->changed) {
                 $this->files->put(base_path($path), $result->source);
-                $output['updated'][] = $path;
+                $output['updated'][] = ['Model', $path];
             }
 
             $next->recordModel($path, $class, [Normalize::class, NormalizeOnSet::class]);
@@ -125,7 +126,7 @@ final class NormalizeGenerator implements Generator
 
             if ($stripped !== $source) {
                 $this->files->put(base_path($path), $stripped);
-                $output['updated'][] = $path;
+                $output['updated'][] = ['Model', $path];
             }
         }
     }
