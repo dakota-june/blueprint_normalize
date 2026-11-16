@@ -36,7 +36,7 @@ final class ModelCastEditor
     public const USE_PATTERN = '/\{\{ use:([A-Za-z_][A-Za-z0-9_\\\\]*) \}\}/';
 
     /** A whole line that ends in an array entry followed by our tag. */
-    private const TAG_LINE = '~^[ \t]*\S[^\n]*,[ \t]*// @generated normalize[ \t]*\n?~m';
+    private const TAG_LINE = '~^[ \t]*\S[^\n]*,[ \t]*// @generated normalize[ \t]*\r?\n?~m';
 
     private const DOC_TAG_LINE = '~^[ \t]*\* @generated normalize[^\n]*\n~m';
 
@@ -60,6 +60,7 @@ final class ModelCastEditor
             return new EditResult($source, false, ["{$class}: {$target}"]);
         }
 
+        $eol = $this->eol($source);
         $namespace = $this->namespaceOf($source);
         $known = $this->imports($tokens, $classIdx) + [$class => ltrim(($namespace !== null ? $namespace . '\\' : '') . $class, '\\')];
         $newImports = [];
@@ -72,15 +73,16 @@ final class ModelCastEditor
                 return new EditResult($source, false);
             }
 
-            $lines = $this->lines($columns, 'method', '            ', [], $class, $namespace, $known, $newImports, $notices);
+            $lines = $this->lines($columns, 'method', '            ', [], $eol, $class, $namespace, $known, $newImports, $notices);
 
             if ($lines === '') {
                 return new EditResult($source, false, $notices);
             }
 
-            $closePos = $tokens[$classClose]->pos;
-            $prefix = rtrim(substr($source, 0, $closePos));
-            $edits[] = [strlen($prefix), $closePos - strlen($prefix), (str_ends_with($prefix, '{') ? "\n" : "\n\n") . $this->method($lines) . "\n"];
+            // Goes in right after the last member, ahead of the whitespace that precedes the closing brace,
+            // so that removing it later restores that whitespace exactly.
+            $prefix = rtrim(substr($source, 0, $tokens[$classClose]->pos));
+            $edits[] = [strlen($prefix), 0, (str_ends_with($prefix, '{') ? $eol : $eol . $eol) . $this->method($lines, $eol)];
         } else {
             $open = $tokens[$target['open']];
             $sliceStart = $open->pos + 1;
@@ -93,22 +95,32 @@ final class ModelCastEditor
             }
 
             $leading = $this->leadingWhitespace($source, $tokens[$target['anchor']]->pos);
-            $lines = $this->lines($columns, $target['kind'], $leading . '    ', $this->keys($cleaned), $class, $namespace, $known, $newImports, $notices);
+            $lines = $this->lines($columns, $target['kind'], $leading . '    ', $this->keys($cleaned), $eol, $class, $namespace, $known, $newImports, $notices);
 
             if ($lines === '') {
                 $replacement = trim($cleaned) === '' ? '' : $cleaned;
             } elseif (trim($cleaned) === '') {
-                $replacement = "\n" . $lines . $leading;
+                $replacement = $eol . $lines . $leading;
             } else {
-                $head = rtrim($cleaned);
-                $replacement = (str_ends_with($head, ',') ? $head : $head . ',') . "\n" . $lines . $leading;
+                // Keep whatever sits between the last entry and the `]` exactly as it is (Blueprint writes
+                // \r\n inside its arrays on Windows), so removing our lines gives the original back.
+                $trimmed = rtrim($cleaned);
+                $tail = substr($cleaned, strlen($trimmed));
+                $newline = strrpos($tail, "\n");
+
+                $replacement = (str_ends_with($trimmed, ',') ? $trimmed : $trimmed . ',')
+                    . ($newline === false ? $eol : substr($tail, 0, $newline + 1))
+                    . $lines
+                    . ($newline === false ? $leading : substr($tail, $newline + 1));
             }
 
             $edits[] = [$sliceStart, $sliceLength, $replacement];
         }
 
         if ($newImports !== []) {
-            $edits[] = $this->importEdit($tokens, $classIdx, array_values(array_unique($newImports)));
+            $import = $this->importEdit($tokens, $classIdx, array_values(array_unique($newImports)));
+            $import[2] = str_replace("\n", $eol, $import[2]);
+            $edits[] = $import;
         }
 
         $result = $this->apply($source, $edits);
@@ -148,7 +160,7 @@ final class ModelCastEditor
      * @param  array<int, string>  $newImports
      * @param  array<int, string>  $notices
      */
-    private function lines(array $columns, string $kind, string $indent, array $existingKeys, string $class, ?string $namespace, array &$known, array &$newImports, array &$notices): string
+    private function lines(array $columns, string $kind, string $indent, array $existingKeys, string $eol, string $class, ?string $namespace, array &$known, array &$newImports, array &$notices): string
     {
         $lines = '';
 
@@ -165,7 +177,7 @@ final class ModelCastEditor
                 ? $castClass . '::using(' . implode(', ', array_map($this->quote(...), $cast['operations'])) . ')'
                 : $castClass . "::class . '" . addcslashes(':' . implode(',', $cast['operations']), "'\\") . "'";
 
-            $lines .= $indent . $this->quote((string) $column) . ' => ' . $value . ', // ' . self::MARKER . "\n";
+            $lines .= $indent . $this->quote((string) $column) . ' => ' . $value . ', // ' . self::MARKER . $eol;
         }
 
         return $lines;
@@ -176,9 +188,10 @@ final class ModelCastEditor
         return "'" . addcslashes($value, "'\\") . "'";
     }
 
-    private function method(string $lines): string
+    private function method(string $lines, string $eol): string
     {
-        return "    /**\n"
+        // $lines already end in the file's line ending; only the fixed text needs converting.
+        $head = "    /**\n"
             . "     * Get the attributes that should be cast.\n"
             . "     *\n"
             . "     * @return array<string, string>\n"
@@ -186,10 +199,17 @@ final class ModelCastEditor
             . "     */\n"
             . "    protected function casts(): array\n"
             . "    {\n"
-            . "        return [\n"
-            . $lines
-            . "        ];\n"
-            . '    }';
+            . "        return [\n";
+
+        return str_replace("\n", $eol, $head) . $lines . '        ];' . $eol . '    }';
+    }
+
+    /** The file's own line ending: that of its first line. */
+    private function eol(string $source): string
+    {
+        $pos = strpos($source, "\n");
+
+        return $pos !== false && $pos > 0 && $source[$pos - 1] === "\r" ? "\r\n" : "\n";
     }
 
     /** Keys that are already written in the array text, one entry per line. @return array<int, string> */
@@ -291,12 +311,15 @@ final class ModelCastEditor
         $start = $this->lineStart($source, $tokens[$docIdx]->pos);
         $end = $tokens[$braceClose]->pos + 1;
 
-        if (($source[$end] ?? '') === "\n") {
-            $end++;
-        }
+        // We put a blank line (or just a line break in an empty class) in front of the method and nothing after it.
+        $before = substr($source, 0, $start);
 
-        if ($start >= 2 && $source[$start - 1] === "\n" && $source[$start - 2] === "\n") {
-            $start--;                                           // the blank line we put above it
+        foreach (["\r\n\r\n", "\n\n", "\r\n", "\n"] as $gap) {
+            if (str_ends_with($before, $gap)) {
+                $start -= strlen($gap);
+
+                break;
+            }
         }
 
         return substr_replace($source, '', $start, $end - $start);

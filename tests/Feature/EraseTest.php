@@ -28,7 +28,7 @@ it('puts the models back exactly as Blueprint wrote them', function () {
 it('removes a casts() method it added, and leaves a developer\'s edits alone', function () {
     $this->build($this->draft(['Account' => ['title' => 'string']]), ['models']);
     $path = base_path('app/Models/Account.php');
-    file_put_contents($path, (string) preg_replace('~\n    /\*\*\n     \* Get the attributes that should be cast.*?\n    }\n~s', '', file_get_contents($path)));
+    file_put_contents($path, (string) preg_replace('~\r?\n    /\*\*\n     \* Get the attributes that should be cast.*?\n    }\r?\n~s', '', file_get_contents($path)));
     $baseline = file_get_contents($path);
 
     $this->build($this->draft(['Account' => ['title' => 'string normalize:trim']]), ['normalize']);

@@ -178,3 +178,38 @@ it('reports whether tagged entries are present', function () {
     expect($editor->hasTagged(blueprintModel()))->toBeFalse()
         ->and($editor->hasTagged($editor->update(blueprintModel(), 'Thing', TRIM_UPPER)->source))->toBeTrue();
 });
+
+it('keeps Windows line endings inside the array, byte for byte', function () {
+    $editor = new ModelCastEditor();
+    $original = blueprintModel("            'id' => 'integer',\r\n            'published_at' => 'timestamp',\r\n");
+    $original = str_replace("        ];\n    }", "        ];\n    }", $original);
+    $original = str_replace("        return [\n", "        return [\r\n", $original);
+
+    $edited = $editor->update($original, 'Thing', TRIM_UPPER)->source;
+
+    expect($edited)->toContain("'published_at' => 'timestamp',\r\n            'name' => Normalize::using('trim', 'upper'), // @generated normalize\n        ];")
+        ->and($editor->update($edited, 'Thing', TRIM_UPPER)->changed)->toBeFalse()
+        ->and($editor->strip($edited, 'Thing', ['Dakotajune\Normalize\Casts\Normalize']))->toBe($original);
+});
+
+it('keeps the indent of the closing bracket, whatever it was', function () {
+    $editor = new ModelCastEditor();
+    $original = str_replace("        ];\n    }", "      ];\n    }", blueprintModel());
+
+    $edited = $editor->update($original, 'Thing', TRIM_UPPER)->source;
+
+    expect($edited)->toContain("// @generated normalize\n      ];")
+        ->and($editor->strip($edited, 'Thing', ['Dakotajune\Normalize\Casts\Normalize']))->toBe($original);
+});
+
+it('leaves the whitespace around a casts() method it adds exactly as it was', function (string $ending) {
+    $editor = new ModelCastEditor();
+    $original = str_replace("\n", $ending, modelWithoutCasts("    protected \$fillable = ['name'];\n"));
+
+    $edited = $editor->update($original, 'Thing', TRIM_UPPER)->source;
+
+    expect($edited)->toContain("protected function casts(): array")
+        ->not->toContain("\r\r")
+        ->and($ending === "\n" || preg_match('/(?<!\r)\n/', $edited) === 0)->toBeTrue()
+        ->and($editor->strip($edited, 'Thing', ['Dakotajune\Normalize\Casts\Normalize']))->toBe($original);
+})->with(['LF' => ["\n"], 'CRLF' => ["\r\n"]]);

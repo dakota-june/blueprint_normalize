@@ -166,7 +166,7 @@ it('puts a casts() method on a model that has none', function () {
     $path = base_path('app/Models/Account.php');
 
     // Make the model one that Blueprint left without casts.
-    $withoutCasts = (string) preg_replace('~\n    /\*\*\n     \* Get the attributes that should be cast.*?\n    }\n~s', '', file_get_contents($path));
+    $withoutCasts = (string) preg_replace('~\r?\n    /\*\*\n     \* Get the attributes that should be cast.*?\n    }\r?\n~s', '', file_get_contents($path));
     file_put_contents($path, $withoutCasts);
 
     $this->build($this->draft(['Account' => ['title' => 'string normalize:trim']]), ['normalize']);

@@ -63,7 +63,9 @@ trait RemovesImports
         $start = $tokens[$target[0]]->pos;
         $end = $tokens[$target[1]]->pos + 1;
 
-        if (isset($source[$end]) && $source[$end] === "\n") {
+        if (substr($source, $end, 2) === "\r\n") {
+            $end += 2;
+        } elseif (isset($source[$end]) && $source[$end] === "\n") {
             $end++;
         }
 
